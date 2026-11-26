@@ -393,3 +393,123 @@ print("Grad-CAM minimum:", image_gradcam.min())
 print("Grad-CAM maximum:", image_gradcam.max())
 print("Grad-CAM mean:", image_gradcam.mean())
 print("All values finite:", np.isfinite(image_gradcam).all())
+
+# %% Evaluate the complete test dataset
+from sklearn.metrics import (
+    accuracy_score,
+    precision_score,
+    recall_score,
+    f1_score,
+    confusion_matrix,
+    ConfusionMatrixDisplay,
+    classification_report
+)
+
+model.eval()
+eval_device = next(model.parameters()).device
+
+all_labels = []
+all_predictions = []
+
+with torch.no_grad():
+    for test_inputs, test_labels in test_loader:
+        test_inputs = test_inputs.to(eval_device)
+
+        test_outputs = model(test_inputs)
+        predictions = test_outputs.argmax(dim=1)
+
+        all_labels.extend(test_labels.cpu().numpy())
+        all_predictions.extend(predictions.cpu().numpy())
+
+accuracy = accuracy_score(all_labels, all_predictions)
+
+precision = precision_score(
+    all_labels, all_predictions,
+    average="macro", zero_division=0
+)
+
+recall = recall_score(
+    all_labels, all_predictions,
+    average="macro", zero_division=0
+)
+
+f1 = f1_score(
+    all_labels, all_predictions,
+    average="macro", zero_division=0
+)
+
+print("===== Full test evaluation =====")
+print("Test images evaluated:", len(all_labels))
+print("Accuracy:", accuracy)
+print("Macro Precision:", precision)
+print("Macro Recall:", recall)
+print("Macro F1-score:", f1)
+
+print("\nClassification report:")
+print(classification_report(
+    all_labels,
+    all_predictions,
+    labels=list(range(len(test_dataset.classes))),
+    target_names=test_dataset.classes,
+    zero_division=0
+))
+
+# %% Confusion matrix
+cm = confusion_matrix(
+    all_labels,
+    all_predictions,
+    labels=list(range(len(test_dataset.classes)))
+)
+
+print("Confusion matrix:")
+print(cm)
+
+fig, ax = plt.subplots(figsize=(8, 6))
+
+disp = ConfusionMatrixDisplay(
+    confusion_matrix=cm,
+    display_labels=test_dataset.classes
+)
+
+disp.plot(
+    cmap="Blues",
+    values_format="d",
+    xticks_rotation=45,
+    ax=ax
+)
+
+plt.title("VGG16 Confusion Matrix")
+plt.tight_layout()
+
+plt.savefig(
+    "confusion_matrix.png",
+    dpi=300,
+    bbox_inches="tight"
+)
+
+plt.show()
+
+# %% Case A prediction score
+model.eval()
+
+with torch.no_grad():
+    case_scores = model(
+        inputs[image_id].unsqueeze(0).to(
+            next(model.parameters()).device
+        )
+    )
+
+    case_target = case_scores.argmax(dim=1).item()
+    case_logit = case_scores[0, case_target].item()
+
+print("Case ID: A")
+print("Batch image index:", image_id)
+
+print("Dataset label:",
+      test_dataset.classes[int(labels[image_id])])
+
+print("Predicted class:",
+      test_dataset.classes[case_target])
+
+print("Predicted class index:", case_target)
+print("Predicted class logit:", case_logit)
